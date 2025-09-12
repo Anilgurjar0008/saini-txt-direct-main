@@ -55,6 +55,52 @@ bot = Client(
     bot_token=BOT_TOKEN
 )
 
+# ========== Token Prompt Preprocessor (runs before other handlers) ==========
+# Asks for token on every DRM link or TXT/caption containing DRM providers.
+DRM_PROVIDERS = ("classplus", "classplusapp.com", "careerwill", "physicswallah", "pw.live", "utkarsh", "visionias", "studyiq", "brightcove", "vimeo", "khangs", "appx")
+
+@bot.on_message((filters.private | filters.group) & (filters.text | filters.caption | filters.document), group=-1)
+async def _token_prompt_preprocessor(client, m: Message):
+    try:
+        # Heuristic: only ask when message has a known provider URL or a .txt with links
+        text = (m.text or "") + " " + (m.caption or "")
+        is_txt = bool(getattr(m, "document", None) and str(m.document.file_name).lower().endswith(".txt"))
+        has_provider = any(p in text.lower() for p in DRM_PROVIDERS)
+        if not (has_provider or is_txt):
+            return  # Not a DRM-related message
+        
+        editable = await m.reply_text("**🔹Enter __PW/CP/CW__ Working Token For MPD URL or send /d**")
+        try:
+            input4: Message = await bot.listen(editable.chat.id, timeout=30)
+            raw_text4 = (input4.text or "").strip()
+            await input4.delete(True)
+        except asyncio.TimeoutError:
+            raw_text4 = "/d"
+        
+        if raw_text4 == "/d":
+            # Use old defaults from globals
+            globals.cwtoken = getattr(globals, "cwtoken", "")
+            globals.cptoken = getattr(globals, "cptoken", "")
+            globals.pwtoken = getattr(globals, "pwtoken", "")
+        else:
+            # Set for this run; downstream code will consume globals.*
+            globals.cwtoken = raw_text4
+            globals.cptoken = raw_text4
+            globals.pwtoken = raw_text4
+        
+        try:
+            await editable.edit("✅ Token set. Processing...")
+        except Exception:
+            pass
+    except Exception as _e:
+        # Fail-safe: don't block other handlers
+        try:
+            await m.reply_text(f"⚠️ Token preprocessor error: {_e}")
+        except Exception:
+            pass
+
+
+
 # .....,.....,.......,...,.......,....., .....,.....,.......,...,.......,.....,
 # .....,.....,.......,...,.......,....., .....,.....,.......,...,.......,.....,
 @bot.on_message(filters.command("start"))
@@ -106,7 +152,7 @@ async def start(bot, m: Message):
             [InlineKeyboardButton("✨ Commands", callback_data="cmd_command")],
             [InlineKeyboardButton("💎 Features", callback_data="feat_command"), InlineKeyboardButton("⚙️ Settings", callback_data="setttings")],
             [InlineKeyboardButton("💳 Plans", callback_data="upgrade_command")],
-            [InlineKeyboardButton(text="📞 Contact", url=f"tg://openmessage?user_id={OWNER}"), InlineKeyboardButton(text="🛠️ Contact", url="https://t.me/ItsUGBot")],
+            [InlineKeyboardButton(text="📞 Contact", url=f"tg://openmessage?user_id={OWNER}"), InlineKeyboardButton(text="🛠️ Repo", url="https://github.com/nikhilsainiop/saini-txt-direct")],
         ])
         
         await start_message.edit_text(
@@ -121,7 +167,7 @@ async def start(bot, m: Message):
             [InlineKeyboardButton("✨ Commands", callback_data="cmd_command")],
             [InlineKeyboardButton("💎 Features", callback_data="feat_command"), InlineKeyboardButton("⚙️ Settings", callback_data="setttings")],
             [InlineKeyboardButton("💳 Plans", callback_data="upgrade_command")],
-            [InlineKeyboardButton(text="📞 Contact", url=f"tg://openmessage?user_id={OWNER}"), InlineKeyboardButton(text="🛠️ Contact", url="https://t.me/ItsUGBot")],
+            [InlineKeyboardButton(text="📞 Contact", url=f"tg://openmessage?user_id={OWNER}"), InlineKeyboardButton(text="🛠️ Repo", url="https://github.com/nikhilsainiop/saini-txt-direct")],
         ])
         await start_message.edit_text(
            f" 🎉 Welcome {m.from_user.first_name} to DRM Bot! 🎉\n\n"
@@ -139,7 +185,7 @@ async def back_to_main_menu(client, callback_query):
             [InlineKeyboardButton("✨ Commands", callback_data="cmd_command")],
             [InlineKeyboardButton("💎 Features", callback_data="feat_command"), InlineKeyboardButton("⚙️ Settings", callback_data="setttings")],
             [InlineKeyboardButton("💳 Plans", callback_data="upgrade_command")],
-            [InlineKeyboardButton(text="📞 Contact", url=f"tg://openmessage?user_id={OWNER}"), InlineKeyboardButton(text="🛠️ Contact", url="https://t.me/ItsUGBot")],
+            [InlineKeyboardButton(text="📞 Contact", url=f"tg://openmessage?user_id={OWNER}"), InlineKeyboardButton(text="🛠️ Repo", url="https://github.com/nikhilsainiop/saini-txt-direct")],
         ])
     
     await callback_query.message.edit_media(
@@ -625,7 +671,7 @@ async def credit(client, callback_query):
             globals.endfilename = '/d'
             globals.thumb = '/d'
             globals.CR = f"{CREDIT}"
-            globals.cwtoken = 'eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJpYXQiOjE3MjQyMzg3OTEsImNvbiI6eyJpc0FkbWluIjpmYWxzZSwiYXVzZXIiOiJVMFZ6TkdGU2NuQlZjR3h5TkZwV09FYzBURGxOZHowOSIsImlkIjoiZEUxbmNuZFBNblJqVEROVmFWTlFWbXhRTkhoS2R6MDkiLCJmaXJzdF9uYW1lIjoiYVcxV05ITjVSemR6Vm10ak1WUlBSRkF5ZVNzM1VUMDkiLCJlbWFpbCI6Ik5Ga3hNVWhxUXpRNFJ6VlhiR0ppWTJoUk0wMVdNR0pVTlU5clJXSkRWbXRMTTBSU2FHRnhURTFTUlQwPSIsInBob25lIjoiVUhVMFZrOWFTbmQ1ZVcwd1pqUTViRzVSYVc5aGR6MDkiLCJhdmF0YXIiOiJLM1ZzY1M4elMwcDBRbmxrYms4M1JEbHZla05pVVQwOSIsInJlZmVycmFsX2NvZGUiOiJOalZFYzBkM1IyNTBSM3B3VUZWbVRtbHFRVXAwVVQwOSIsImRldmljZV90eXBlIjoiYW5kcm9pZCIsImRldmljZV92ZXJzaW9uIjoiUShBbmRyb2lkIDEwLjApIiwiZGV2aWNlX21vZGVsIjoiU2Ftc3VuZyBTTS1TOTE4QiIsInJlbW90ZV9hZGRyIjoiNTQuMjI2LjI1NS4xNjMsIDU0LjIyNi4yNTUuMTYzIn19.snDdd-PbaoC42OUhn5SJaEGxq0VzfdzO49WTmYgTx8ra_Lz66GySZykpd2SxIZCnrKR6-R10F5sUSrKATv1CDk9ruj_ltCjEkcRq8mAqAytDcEBp72-W0Z7DtGi8LdnY7Vd9Kpaf499P-y3-godolS_7ixClcYOnWxe2nSVD5C9c5HkyisrHTvf6NFAuQC_FD3TzByldbPVKK0ag1UnHRavX8MtttjshnRhv5gJs5DQWj4Ir_dkMcJ4JaVZO3z8j0OxVLjnmuaRBujT-1pavsr1CCzjTbAcBvdjUfvzEhObWfA1-Vl5Y4bUgRHhl1U-0hne4-5fF0aouyu71Y6W0eg'
+            globals.cwtoken = 'eyJhbGciOiJIUzM4NCIsInR5cCI6IkpXVCJ9.eyJpZCI6MTI4ODczOTY0LCJvcmdJZCI6NzYzMzIwLCJ0eXBlIjoxLCJtb2JpbGUiOiI5MTk2OTQwMjA1MjEiLCJuYW1lIjoiQW5pbCBHdXJqYXIiLCJlbWFpbCI6IjJjMDUzOTA3YWE1NzRiZTU5ZjllODk0OTc3YmZmNGY0QGdtYWlsLmNvbSIsImlzRmlyc3RMb2dpbiI6dHJ1ZSwiZGVmYXVsdExhbmd1YWdlIjoiRU4iLCJjb3VudHJ5Q29kZSI6IklOIiwiaXNJbnRlcm5hdGlvbmFsIjowLCJpc0RpeSI6dHJ1ZSwibG9naW5WaWEiOiJPdHAiLCJmaW5nZXJwcmludElkIjoiZmU5YTUyZGExYjU1NDY0ZGIxNmE0YmMyZDQwNTQ4NzAiLCJpYXQiOjE3NTcyNzM3ODEsImV4cCI6MTc1Nzg3ODU4MX0.0EiA4QfZgu__VIVsgdKU_ZP5tpHroxoUulLksuxlu3a4Hd3Jz2CvLtA60LXIkOom'
             globals.cptoken = "cptoken"
             globals.pwtoken = "pwtoken"
             globals.vidwatermark = '/d'
@@ -973,6 +1019,3 @@ if __name__ == "__main__":
 
 
 bot.run()
-
-# Utkarsh login integration
-from . import utk
